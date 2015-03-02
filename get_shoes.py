@@ -21,6 +21,7 @@ class SaksScarper(object):
         all the pages related to the serach term
         """
         self.search_term = search_term
+        self.company = 'saks'
         self.params = {'SearchString': self.search_term, 'Nao': 0}
         self.base_url = 'http://www.saksfifthavenue.com/search/EndecaSearch.jsp?\
                          bmForm=endeca_search_form_one&bmFormID=kKYnHcK&bmUID=kKYnHcL&bmIsForm=true\
@@ -61,10 +62,8 @@ class SaksScarper(object):
         lens = map(len, data_lst)
         if len(set(lens)) > 1:
             raise Exception('Number of descriptions and images do not match!')
-        return lens[0]
 
-    @staticmethod
-    def _get_img(img_tags, category, ipage, orientation='front'):
+    def _get_img(self, img_tags, category, ipage, orientation='front'):
         img_lst = []
         for i, tag in enumerate(img_tags):
             item_id = (ipage + 1) * i
@@ -73,7 +72,7 @@ class SaksScarper(object):
             img_lst.append(img)
             if not os.path.exists(category):
                 os.makedir(category)
-            f = open('%s/%s_%s.jpg' % (category, orientation, item_id), 'w')
+            f = open('%s/%s_%s_%s.jpg' % (category, self.company, self.search_term, item_id), 'w')
             f.write(img)
             f.close()
 
@@ -97,20 +96,18 @@ class SaksScarper(object):
         price_tags = soup.select('span.product-price')
         front_img_tags = soup.select('img.pa-product-large')
         # Check if the list of tags are all of the same length
-        total_num = self._check_data_len([designer_name_tags, description_tags, price_tags])
+        self._check_data_len([designer_name_tags, description_tags, price_tags])
 
         # Scrape all the info from the page
         designer_name = self._get_text(designer_name_tags)
         description = self._get_text(description_tags)
         price = self._get_text(price_tags)
         self._get_img(front_img_tags, self.search_term, ipage, orientation='front')
-        category = [self.search_term] * total_num
 
-        return izip(category, description, designer_name, price)
+        return izip(description, designer_name, price)
 
-    def _insert_into_db(self, data_tuples):
-        fields = ['category', 'description', 'designer_name', 'price']
-        self.mongo.insertion(fields, data_tuples)
+    def _insert_into_db(self, json):
+        self.mongo.insertion(json)
 
     def main(self):
         """Runs the scraping looping through the pages"""
@@ -120,7 +117,13 @@ class SaksScarper(object):
             if i == 0 or i % 5 == 0:
                 print 'Done Page', i
             data_tuples = self._get_page_content(link, i)
-            self._insert_into_db(data_tuples)
+            fields = ['description', 'designer_name', 'price']
+            for i, tup in enumerate(data_tuples):
+                if len(fields) != len(tup):
+                    raise Exception('Fields must have the same length as values')
+                json = dict(zip(fields, tup))
+                json['item_id'] = '%s_%s_%s' % (self.company, self.search_term, i)
+                self._insert_into_db(json)
 
 if __name__ == '__main__':
     sk = SaksScarper(args.search_term)
