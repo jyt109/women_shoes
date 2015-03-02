@@ -30,7 +30,7 @@ class SaksScarper(object):
                          &bmHidden=sid&sid=14BBCA598131&bmHidden=FOLDER%3C%3Efolder_id&FOLDER%3C%3Efolder_id='
         self.base_url = self.base_url.replace(' ', '')
         self.all_links = []
-        self.mongo = MongoDB(db_name='shoe', table_name='saks')
+        self.mongo = MongoDB(db_name='shoe', table_name=search_term)
 
     def join_url(self):
         """
@@ -64,23 +64,24 @@ class SaksScarper(object):
         return lens[0]
 
     @staticmethod
-    def _get_img(img_tags, category, orientation='front'):
+    def _get_img(img_tags, category, ipage, orientation='front'):
         img_lst = []
         for i, tag in enumerate(img_tags):
+            item_id = (ipage + 1) * i
             img_link = tag['src']
             img = requests.get(img_link).content
             img_lst.append(img)
             if not os.path.exists(category):
                 os.makedir(category)
-            f = open('%s/%s_%s.jpg' % (category, orientation, i), 'w')
+            f = open('%s/%s_%s.jpg' % (category, orientation, item_id), 'w')
             f.write(img)
             f.close()
 
     @staticmethod
     def _get_text(txt_tags):
-            return [tag.text.replace('$', '') for tag in txt_tags]
+            return [tag.text.strip() for tag in txt_tags]
 
-    def _get_page_content(self, link):
+    def _get_page_content(self, link, ipage):
         """
         :param html: The HTML page as string
         :return: None
@@ -102,23 +103,24 @@ class SaksScarper(object):
         designer_name = self._get_text(designer_name_tags)
         description = self._get_text(description_tags)
         price = self._get_text(price_tags)
-        self._get_img(front_img_tags, self.search_term, orientation='front')
+        self._get_img(front_img_tags, self.search_term, ipage, orientation='front')
         category = [self.search_term] * total_num
 
         return izip(category, description, designer_name, price)
 
     def _insert_into_db(self, data_tuples):
         fields = ['category', 'description', 'designer_name', 'price']
-        for tup in data_tuples:
-            self.mongo.insertion(fields, tup)
+        self.mongo.insertion(fields, data_tuples)
 
     def main(self):
         """Runs the scraping looping through the pages"""
         self.get_page_links()
+        print 'Number of Pages', len(self.all_links)
         for i, link in enumerate(self.all_links):
-            if i == 0 or i % 100 == 0:
-                data_tuples = self._get_page_content(link)
-                self._insert_into_db(data_tuples)
+            if i == 0 or i % 5 == 0:
+                print 'Done Page', i
+            data_tuples = self._get_page_content(link, i)
+            self._insert_into_db(data_tuples)
 
 if __name__ == '__main__':
     sk = SaksScarper(args.search_term)
