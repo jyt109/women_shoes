@@ -13,9 +13,5 @@ class MongoDB(object):
     def get_table(self):
         return self.table
 
-    def insertion(self, fields, tup_lst):
-        for tup in tup_lst:
-            if len(fields) != len(tup):
-                raise Exception('Fields must have the same length as values')
-            json = dict(zip(fields, tup))
-            self.table.insert(json)
+    def insertion(self, json):
+        self.table.insert(json)
